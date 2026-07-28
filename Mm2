@@ -1,0 +1,1148 @@
+-- ==========================================
+-- MM2 SCRIPT COMPLETO: FLING CON RETORNO A POSICIÓN ORIGINAL
+-- ==========================================
+
+-- 1. BOTÓN FLOTANTE: AUTO COINS (ROJO)
+local coinBtn = Instance.new("TextButton")
+coinBtn.Name = "CoinBtn"
+coinBtn.Size = UDim2.new(0, 150, 0, 50)
+coinBtn.Position = UDim2.new(0.5, -160, 0.75, 0) 
+coinBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+coinBtn.Text = "AUTO COINS: OFF"
+coinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+coinBtn.Font = Enum.Font.GothamBold
+coinBtn.TextSize = 16
+coinBtn.BorderSizePixel = 0
+coinBtn.Visible = true
+coinBtn.Parent = game:GetService("CoreGui")
+coinBtn.ZIndex = 999999
+
+local cCorner = Instance.new("UICorner"); cCorner.CornerRadius = UDim.new(1, 0); cCorner.Parent = coinBtn
+local cStroke = Instance.new("UIStroke"); cStroke.Color = Color3.fromRGB(0,0,0); cStroke.Thickness = 3; cStroke.Parent = coinBtn
+
+local cDragging = false; local cDragStart, cStartPos
+coinBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        cDragging = true; cDragStart = input.Position; cStartPos = coinBtn.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then cDragging = false end end)
+    end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if cDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - cDragStart
+        coinBtn.Position = UDim2.new(cStartPos.X.Scale, cStartPos.X.Offset + delta.X, cStartPos.Y.Scale, cStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- 2. BOTÓN FLOTANTE: TP TECHO / XP (AZUL)
+local xpBtn = Instance.new("TextButton")
+xpBtn.Name = "XpBtn"
+xpBtn.Size = UDim2.new(0, 150, 0, 50)
+xpBtn.Position = UDim2.new(0.5, 10, 0.75, 0) 
+xpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 255)
+xpBtn.Text = "TP TECHO (XP): OFF"
+xpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+xpBtn.Font = Enum.Font.GothamBold
+xpBtn.TextSize = 16
+xpBtn.BorderSizePixel = 0
+xpBtn.Visible = true
+xpBtn.Parent = game:GetService("CoreGui")
+xpBtn.ZIndex = 999999
+
+local xCorner = Instance.new("UICorner"); xCorner.CornerRadius = UDim.new(1, 0); xCorner.Parent = xpBtn
+local xStroke = Instance.new("UIStroke"); xStroke.Color = Color3.fromRGB(0,0,0); xStroke.Thickness = 3; xStroke.Parent = xpBtn
+
+local xDragging = false; local xDragStart, xStartPos
+xpBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        xDragging = true; xDragStart = input.Position; xStartPos = xpBtn.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then xDragging = false end end)
+    end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if xDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - xDragStart
+        xpBtn.Position = UDim2.new(xStartPos.X.Scale, xStartPos.X.Offset + delta.X, xStartPos.Y.Scale, xStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- LOGICA DE LOS BOTONES
+coinBtn.MouseButton1Click:Connect(function()
+    _G.MM2.autoCoins = not _G.MM2.autoCoins
+    if _G.MM2.autoCoins then
+        coinBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50); coinBtn.Text = "AUTO COINS: ON"
+        startCoinFarm()
+    else
+        coinBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50); coinBtn.Text = "AUTO COINS: OFF"
+        if coinThread then task.cancel(coinThread); coinThread = nil end
+        if liveFarmTracer and liveFarmTracer.Parent then liveFarmTracer:Destroy(); liveFarmTracer = nil end
+    end
+end)
+
+xpBtn.MouseButton1Click:Connect(function()
+    _G.MM2.autoXp = not _G.MM2.autoXp
+    if _G.MM2.autoXp then
+        xpBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50); xpBtn.Text = "TP TECHO (XP): ON"
+        startXpFarm()
+    else
+        xpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 255); xpBtn.Text = "TP TECHO (XP): OFF"
+        if xpThread then task.cancel(xpThread); xpThread = nil end
+        local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and hrp.Position.Y > 40 then
+             hrp.CFrame = CFrame.new(hrp.Position.X, 5, hrp.Position.Z)
+        end
+    end
+end)
+
+
+-- 3. FPS COUNTER
+local fpsGui = Instance.new("ScreenGui")
+fpsGui.Name = "FPSCounter"
+fpsGui.ResetOnSpawn = false
+fpsGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+fpsGui.Parent = game:GetService("CoreGui")
+
+local fpsFrame = Instance.new("Frame")
+fpsFrame.Name = "FPSFrame"
+fpsFrame.Size = UDim2.new(0, 120, 0, 35)
+fpsFrame.Position = UDim2.new(0, 10, 0, 10)
+fpsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+fpsFrame.BackgroundTransparency = 0.2
+fpsFrame.BorderSizePixel = 0
+fpsFrame.Visible = false
+fpsFrame.Parent = fpsGui
+
+local fpsCorner = Instance.new("UICorner")
+fpsCorner.CornerRadius = UDim.new(0, 8)
+fpsCorner.Parent = fpsFrame
+local fpsStroke = Instance.new("UIStroke")
+fpsStroke.Color = Color3.fromRGB(0, 150, 255)
+fpsStroke.Thickness = 2
+fpsStroke.Parent = fpsFrame
+
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Name = "FPSLabel"
+fpsLabel.Size = UDim2.new(1, 0, 1, 0)
+fpsLabel.BackgroundTransparency = 1
+fpsLabel.Text = "FPS: 0"
+fpsLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+fpsLabel.Font = Enum.Font.GothamBold
+fpsLabel.TextSize = 16
+fpsLabel.Parent = fpsFrame
+
+local fpsEnabled = false
+local lastTime = tick()
+local frameCount = 0
+local currentFps = 0
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    if not fpsEnabled then return end
+    frameCount = frameCount + 1
+    local currentTime = tick()
+    if currentTime - lastTime >= 1 then
+        currentFps = frameCount
+        frameCount = 0
+        lastTime = currentTime
+        fpsLabel.Text = "FPS: " .. currentFps
+        if currentFps >= 60 then fpsLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+        elseif currentFps >= 30 then fpsLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        else fpsLabel.TextColor3 = Color3.fromRGB(255, 50, 50) end
+    end
+end)
+
+-- 4. FPS BOOST
+local fpsBoostEnabled = false
+local originalSettings = {}
+local lighting = game:GetService("Lighting")
+
+function applyFpsBoost()
+    if fpsBoostEnabled then return end
+    fpsBoostEnabled = true
+    originalSettings.ParticleEmissionRate = settings().Rendering.ParticleEmissionRate
+    originalSettings.ShadowEnabled = settings().Rendering.ShadowEnabled
+    pcall(function()
+        settings().Rendering.ParticleEmissionRate = 0
+        settings().Rendering.ShadowEnabled = false
+    end)
+    for _, descendant in pairs(workspace:GetDescendants()) do
+        if descendant:IsA("ParticleEmitter") or descendant:IsA("Trail") then
+            if not descendant:GetAttribute("OriginalEnabled") then
+                descendant:SetAttribute("OriginalEnabled", descendant.Enabled)
+                descendant.Enabled = false
+            end
+        elseif descendant:IsA("Beam") then
+            if not descendant:GetAttribute("OriginalEnabled") then
+                descendant:SetAttribute("OriginalEnabled", descendant.Enabled)
+                descendant.Enabled = false
+            end
+        end
+    end
+    pcall(function()
+        lighting.GlobalShadows = false
+        lighting.EnvironmentDiffuseScale = 0
+        lighting.EnvironmentSpecularScale = 0
+    end)
+end
+
+function removeFpsBoost()
+    if not fpsBoostEnabled then return end
+    fpsBoostEnabled = false
+    pcall(function()
+        settings().Rendering.ParticleEmissionRate = originalSettings.ParticleEmissionRate or 1
+        settings().Rendering.ShadowEnabled = originalSettings.ShadowEnabled or true
+    end)
+    for _, descendant in pairs(workspace:GetDescendants()) do
+        if descendant:IsA("ParticleEmitter") or descendant:IsA("Trail") or descendant:IsA("Beam") then
+            local original = descendant:GetAttribute("OriginalEnabled")
+            if original ~= nil then
+                descendant.Enabled = original
+                descendant:SetAttribute("OriginalEnabled", nil)
+            end
+        end
+    end
+    pcall(function()
+        lighting.GlobalShadows = true
+        lighting.EnvironmentDiffuseScale = 1
+        lighting.EnvironmentSpecularScale = 1
+    end)
+end
+
+-- 5. GOD MODE REAL E INFINITO
+local godModeEnabled = false
+local godModeThread = nil
+local godConnections = {}
+
+function enableGodMode()
+    if godModeEnabled then return end
+    godModeEnabled = true
+    
+    godModeThread = task.spawn(function()
+        while godModeEnabled do
+            task.wait(0.05)
+            if LP.Character then
+                local hum = LP.Character:FindFirstChild("Humanoid")
+                if hum and hum.Health < hum.MaxHealth then
+                    hum.Health = hum.MaxHealth
+                end
+            end
+        end
+    end)
+    
+    local function hookCharacter(char)
+        for _, child in ipairs(char:GetDescendants()) do
+            if child:IsA("RemoteEvent") then
+                local name = child.Name:lower()
+                if name:find("damage") or name:find("hit") or name:find("slash") or 
+                   name:find("attack") or name:find("kill") or name:find("stab") then
+                    local originalFireServer = child.FireServer
+                    child.FireServer = function(self, ...)
+                        if godModeEnabled then return nil
+                        else return originalFireServer(self, ...) end
+                    end
+                end
+            end
+        end
+        
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then
+            local conn1 = hum.HealthChanged:Connect(function(newHealth)
+                if godModeEnabled and newHealth < hum.MaxHealth then
+                    task.defer(function() hum.Health = hum.MaxHealth end)
+                end
+            end)
+            local conn2 = hum.Died:Connect(function()
+                if godModeEnabled then
+                    task.wait(0.01)
+                    pcall(function()
+                        hum.Health = hum.MaxHealth
+                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    end)
+                end
+            end)
+            table.insert(godConnections, conn1)
+            table.insert(godConnections, conn2)
+        end
+    end
+    
+    if LP.Character then hookCharacter(LP.Character) end
+    
+    local conn3 = LP.CharacterAdded:Connect(function(newChar)
+        newChar:WaitForChild("Humanoid")
+        if godModeEnabled then
+            task.wait(0.3)
+            hookCharacter(newChar)
+        end
+    end)
+    table.insert(godConnections, conn3)
+end
+
+function disableGodMode()
+    godModeEnabled = false
+    if godModeThread then task.cancel(godModeThread); godModeThread = nil end
+    for _, conn in ipairs(godConnections) do pcall(function() conn:Disconnect() end) end
+    godConnections = {}
+    pcall(function() LP:LoadCharacter() end)
+end
+
+-- 6. ANTI-FLING MEJORADO
+local antiFlingEnabled = false
+local antiFlingConn = nil
+
+function enableAntiFling()
+    if antiFlingEnabled then return end
+    antiFlingEnabled = true
+    
+    local function protectChar(char)
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
+        for _, obj in ipairs(hrp:GetChildren()) do
+            if obj:IsA("BodyVelocity") or obj:IsA("BodyForce") or obj:IsA("BodyGyro") then
+                if obj.Name ~= "AntiFlingProtect" and obj.Name ~= "FarmBV" then 
+                    obj:Destroy() 
+                end
+            end
+        end
+        
+        local bg = Instance.new("BodyGyro")
+        bg.Name = "AntiFlingProtect"
+        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bg.P = 100000
+        bg.D = 10000
+        bg.CFrame = hrp.CFrame
+        bg.Parent = hrp
+        
+        antiFlingConn = RunService.Heartbeat:Connect(function()
+            if not antiFlingEnabled or not char.Parent or not hrp.Parent then
+                bg:Destroy()
+                if antiFlingConn then antiFlingConn:Disconnect() end
+                return
+            end
+            
+            bg.CFrame = hrp.CFrame
+            
+            for _, obj in ipairs(hrp:GetChildren()) do
+                if (obj:IsA("BodyVelocity") or obj:IsA("BodyForce")) and 
+                   obj.Name ~= "AntiFlingProtect" and obj.Name ~= "FarmBV" then
+                    obj:Destroy()
+                end
+            end
+            
+            local vel = hrp.Velocity.Magnitude
+            if vel > 100 then
+                local counterForce = Instance.new("BodyVelocity")
+                counterForce.Name = "AntiFlingCounter"
+                counterForce.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                counterForce.P = 100000
+                counterForce.Velocity = -hrp.Velocity * 2
+                counterForce.Parent = hrp
+                
+                task.delay(0.1, function()
+                    if counterForce and counterForce.Parent then counterForce:Destroy() end
+                end)
+            end
+        end)
+    end
+    
+    if LP.Character then protectChar(LP.Character) end
+    
+    LP.CharacterAdded:Connect(function(char)
+        char:WaitForChild("HumanoidRootPart")
+        if antiFlingEnabled then
+            task.wait(0.3)
+            protectChar(char)
+        end
+    end)
+end
+
+function disableAntiFling()
+    antiFlingEnabled = false
+    if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn = nil end
+    if LP.Character then
+        local hrp = LP.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local protect = hrp:FindFirstChild("AntiFlingProtect")
+            if protect then protect:Destroy() end
+            local counter = hrp:FindFirstChild("AntiFlingCounter")
+            if counter then counter:Destroy() end
+        end
+    end
+end
+
+-- 7. FLING CON RETORNO A POSICIÓN ORIGINAL
+local flingMurdererEnabled = false
+local flingGunEnabled = false
+local flingAllEnabled = false
+
+function applyFling(targetPlayer)
+    if not targetPlayer or not targetPlayer.Character then return end
+    local targetHrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local myHrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not targetHrp or not myHrp then return end
+    
+    -- 1. GUARDAR POSICIÓN ORIGINAL
+    local originalCFrame = myHrp.CFrame
+    
+    -- 2. Teletransportarse DENTRO del objetivo
+    myHrp.CFrame = targetHrp.CFrame
+    
+    -- 3. Crear fuerza en MI personaje para empujarlo a él por colisión
+    local bv = myHrp:FindFirstChild("FlingBV_Me")
+    if bv then bv:Destroy() end
+    
+    bv = Instance.new("BodyVelocity")
+    bv.Name = "FlingBV_Me"
+    bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bv.P = 1000000
+    bv.Parent = myHrp
+    
+    -- Dirección aleatoria hacia arriba
+    bv.Velocity = Vector3.new(
+        math.random(-500, 500),
+        1000,
+        math.random(-500, 500)
+    )
+    
+    -- 4. DESPUÉS DE 1.5 SEGUNDOS, VOLVER A POSICIÓN ORIGINAL
+    task.delay(1.5, function()
+        if bv and bv.Parent then bv:Destroy() end
+        if myHrp and myHrp.Parent then
+            myHrp.CFrame = originalCFrame
+        end
+    end)
+end
+
+function applyFlingAll()
+    for _, p in pairs(Players:GetPlayers()) do if p ~= LP and p.Character then applyFling(p) end end
+end
+function applyFlingMurderer()
+    for _, p in pairs(Players:GetPlayers()) do if p ~= LP and p.Character and getRole(p) == "Murderer" then applyFling(p) end end
+end
+function applyFlingGun()
+    for _, p in pairs(Players:GetPlayers()) do if p ~= LP and p.Character and getRole(p) == "Sheriff" then applyFling(p) end end
+end
+
+-- 8. WINDUI
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+local Window = WindUI:CreateWindow({
+    Title = "MM2 Script", Icon = "shield", Author = "by Jesús", Folder = "mm2script",
+    Size = UDim2.fromOffset(580, 460), Transparent = true, Theme = "Dark", SideBarWidth = 200
+})
+
+-- ==========================================
+-- VARIABLES GLOBALES
+-- ==========================================
+_G.MM2 = {
+    esp = true, espGun = false, aimbot = false, autoGun = false,
+    autoEquip = false, autoCoins = false, autoXp = false, autoKill = false, autoEquipKnife = false,
+    murdererHitbox = false, rutaSpeed = 25
+}
+
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local espCache = {} 
+local routeTracers = {}
+local liveFarmTracer = nil
+local liveRouteTracer = nil
+local liveGunTracer = nil
+local liveGunLabel = nil
+local murdererHighlight = nil
+local Ruta = {}
+local grabando = false
+local jugandoRuta = false
+local coinThread = nil 
+local xpThread = nil 
+
+-- ==========================================
+-- FUNCIONES CORE
+-- ==========================================
+function getRole(player)
+    if not player or not player.Character then return "Innocent" end
+    local bp = player:FindFirstChild("Backpack"); local char = player.Character
+    if bp and bp:FindFirstChild("Knife") then return "Murderer" end
+    if char and char:FindFirstChild("Knife") then return "Murderer" end
+    if bp and (bp:FindFirstChild("Gun") or bp:FindFirstChild("Revolver")) then return "Sheriff" end
+    if char and (char:FindFirstChild("Gun") or char:FindFirstChild("Revolver")) then return "Sheriff" end
+    return "Innocent"
+end
+
+-- HITBOX MURDERER: VERSIÓN AGRESIVA Y FORZADA
+function updateMurdererHitbox()
+    if not _G.MM2.murdererHitbox then
+        if murdererHighlight then
+            pcall(function() murdererHighlight:Destroy() end)
+            murdererHighlight = nil
+        end
+        return
+    end
+    
+    local murdererChar = nil
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character and getRole(p) == "Murderer" then
+            murdererChar = p.Character
+            break
+        end
+    end
+    
+    if murdererChar then
+        if murdererHighlight then
+            pcall(function() murdererHighlight:Destroy() end)
+        end
+        
+        murdererHighlight = Instance.new("Highlight")
+        murdererHighlight.Name = "MM2_ForceHitbox"
+        murdererHighlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+        murdererHighlight.OutlineTransparency = 0
+        murdererHighlight.FillColor = Color3.fromRGB(255, 0, 0)
+        murdererHighlight.FillTransparency = 0.6
+        murdererHighlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        murdererHighlight.Adornee = murdererChar
+        murdererHighlight.Parent = murdererChar
+    else
+        if murdererHighlight then
+            pcall(function() murdererHighlight:Destroy() end)
+            murdererHighlight = nil
+        end
+    end
+end
+
+-- INVISIBILIDAD CORREGIDA
+local invisibilityEnabled = false
+local invisibilityConnection = nil
+local originalTransparencies = {}
+
+function enableInvisibility()
+    if invisibilityEnabled then return end
+    invisibilityEnabled = true
+    
+    local function makeInvisible(char)
+        if not char then return end
+        for _, descendant in ipairs(char:GetDescendants()) do
+            if descendant:IsA("BasePart") then
+                originalTransparencies[descendant] = descendant.Transparency
+                descendant.Transparency = 1
+            elseif descendant:IsA("Decal") or descendant:IsA("Texture") then
+                originalTransparencies[descendant] = descendant.Transparency
+                descendant.Transparency = 1
+            end
+        end
+        for _, acc in ipairs(char:GetChildren()) do
+            if acc:IsA("Accessory") then
+                for _, part in ipairs(acc:GetDescendants()) do
+                    if part:IsA("BasePart") or part:IsA("Decal") then
+                        originalTransparencies[part] = part.Transparency
+                        part.Transparency = 1
+                    end
+                end
+            end
+        end
+    end
+    
+    if LP.Character then makeInvisible(LP.Character) end
+    
+    invisibilityConnection = LP.CharacterAdded:Connect(function(char)
+        char:WaitForChild("Humanoid")
+        if invisibilityEnabled then
+            task.wait(0.5)
+            makeInvisible(char)
+        end
+    end)
+end
+
+function disableInvisibility()
+    invisibilityEnabled = false
+    for part, transparency in pairs(originalTransparencies) do
+        if part and part.Parent then part.Transparency = transparency end
+    end
+    originalTransparencies = {}
+    if invisibilityConnection then
+        invisibilityConnection:Disconnect()
+        invisibilityConnection = nil
+    end
+end
+
+-- ESP OPTIMIZADO CON CACHÉ
+function updateESP()
+    if not _G.MM2.esp then
+        for _, data in pairs(espCache) do 
+            if data.billboard and data.billboard.Parent then data.billboard:Destroy() end 
+        end
+        espCache = {}
+        return
+    end
+    
+    local activePlayers = {}
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LP and player.Character then
+            activePlayers[player] = true
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local role = getRole(player)
+                local color = Color3.fromRGB(0, 255, 0)
+                if role == "Murderer" then color = Color3.fromRGB(255, 0, 0)
+                elseif role == "Sheriff" then color = Color3.fromRGB(0, 100, 255) end
+                
+                if not espCache[player] then
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Name = "ESP_Billboard"
+                    billboard.Size = UDim2.new(0, 120, 0, 30)
+                    billboard.StudsOffset = Vector3.new(0, 3, 0)
+                    billboard.AlwaysOnTop = true
+                    billboard.Parent = hrp
+                    
+                    local label = Instance.new("TextLabel")
+                    label.Name = "ESP_Label"
+                    label.Size = UDim2.new(1, 0, 1, 0)
+                    label.BackgroundTransparency = 1
+                    label.TextColor3 = color
+                    label.TextStrokeTransparency = 0
+                    label.TextSize = 16
+                    label.Font = Enum.Font.GothamBold
+                    label.Parent = billboard
+                    
+                    espCache[player] = {billboard = billboard, label = label}
+                else
+                    local data = espCache[player]
+                    if data.billboard.Parent ~= hrp then
+                        data.billboard.Parent = hrp
+                    end
+                    data.label.Text = player.Name .. " [" .. role .. "]"
+                    data.label.TextColor3 = color
+                end
+            end
+        end
+    end
+    
+    for player, data in pairs(espCache) do
+        if not activePlayers[player] or not player.Character then
+            if data.billboard and data.billboard.Parent then data.billboard:Destroy() end
+            espCache[player] = nil
+        end
+    end
+end
+
+function findDroppedGun()
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Tool") or obj:IsA("Model") then
+            local name = obj.Name:lower()
+            if name:find("gun") or name:find("revolver") or name:find("weapon") then
+                if not obj.Parent:IsA("Backpack") and not obj.Parent:IsA("Character") then
+                    if obj:IsA("Tool") and obj.Handle then return obj.Handle end
+                    if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function updateEspGun()
+    if not _G.MM2.espGun then
+        if liveGunTracer and liveGunTracer.Parent then liveGunTracer:Destroy(); liveGunTracer = nil end
+        if liveGunLabel and liveGunLabel.Parent then liveGunLabel:Destroy(); liveGunLabel = nil end
+        return
+    end
+    
+    local gunPart = findDroppedGun()
+    if not gunPart then
+        if liveGunTracer and liveGunTracer.Parent then liveGunTracer:Destroy(); liveGunTracer = nil end
+        if liveGunLabel and liveGunLabel.Parent then liveGunLabel:Destroy(); liveGunLabel = nil end
+        return
+    end
+    
+    local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    if not liveGunTracer or not liveGunTracer.Parent then
+        liveGunTracer = Instance.new("Part")
+        liveGunTracer.Name = "LiveGunTracer"
+        liveGunTracer.Anchored = true
+        liveGunTracer.CanCollide = false
+        liveGunTracer.Transparency = 0.4
+        liveGunTracer.Material = Enum.Material.Neon
+        liveGunTracer.Color = Color3.fromRGB(0, 150, 255)
+        liveGunTracer.Size = Vector3.new(0.4, 0.4, 1)
+        liveGunTracer.Parent = workspace
+    end
+    
+    local distance = (gunPart.Position - hrp.Position).Magnitude
+    liveGunTracer.Size = Vector3.new(0.4, 0.4, math.max(distance, 0.1))
+    liveGunTracer.CFrame = CFrame.new(hrp.Position, gunPart.Position) * CFrame.new(0, 0, -distance/2)
+    
+    local gunParent = gunPart.Parent
+    if not liveGunLabel or not liveGunLabel.Parent then
+        liveGunLabel = Instance.new("BillboardGui")
+        liveGunLabel.Name = "GunDistanceLabel"
+        liveGunLabel.Size = UDim2.new(0, 150, 0, 40)
+        liveGunLabel.StudsOffset = Vector3.new(0, 3, 0)
+        liveGunLabel.AlwaysOnTop = true
+        liveGunLabel.Parent = gunParent
+        
+        local bg = Instance.new("Frame")
+        bg.Name = "BG"
+        bg.Size = UDim2.new(1, 0, 1, 0)
+        bg.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+        bg.BackgroundTransparency = 0.3
+        bg.BorderSizePixel = 0
+        bg.Parent = liveGunLabel
+        
+        local bgCorner = Instance.new("UICorner")
+        bgCorner.CornerRadius = UDim.new(0, 6)
+        bgCorner.Parent = bg
+        
+        local bgStroke = Instance.new("UIStroke")
+        bgStroke.Color = Color3.fromRGB(0, 150, 255)
+        bgStroke.Thickness = 2
+        bgStroke.Parent = bg
+        
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Name = "Title"
+        titleLabel.Size = UDim2.new(1, 0, 0.5, 0)
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Text = " GUN"
+        titleLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
+        titleLabel.TextStrokeTransparency = 0
+        titleLabel.TextSize = 14
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.Parent = liveGunLabel
+        
+        local distLabel = Instance.new("TextLabel")
+        distLabel.Name = "Distance"
+        distLabel.Size = UDim2.new(1, 0, 0.5, 0)
+        distLabel.Position = UDim2.new(0, 0, 0.5, 0)
+        distLabel.BackgroundTransparency = 1
+        distLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        distLabel.TextStrokeTransparency = 0
+        distLabel.TextSize = 13
+        distLabel.Font = Enum.Font.GothamBold
+        distLabel.Parent = liveGunLabel
+    else
+        if liveGunLabel.Parent ~= gunParent then liveGunLabel.Parent = gunParent end
+    end
+    
+    local distLabel = liveGunLabel:FindFirstChild("Distance")
+    if distLabel then
+        local dist = math.floor((gunPart.Position - hrp.Position).Magnitude)
+        distLabel.Text = " " .. dist .. " studs"
+        if dist < 20 then distLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+        elseif dist < 80 then distLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        else distLabel.TextColor3 = Color3.fromRGB(255, 80, 80) end
+    end
+end
+
+function aimbotMurderer()
+    if not _G.MM2.aimbot then return end
+    local murderer, minDist = nil, math.huge
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character and getRole(p) == "Murderer" then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local myHrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and myHrp then
+                local d = (myHrp.Position - hrp.Position).Magnitude
+                if d < minDist then minDist = d; murderer = hrp end
+            end
+        end
+    end
+    if murderer and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        LP.Character.HumanoidRootPart.CFrame = CFrame.new(LP.Character.HumanoidRootPart.Position, murderer.Position)
+    end
+end
+
+function autoGun()
+    if not _G.MM2.autoGun then return end
+    local sheriffAlive = false
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character and getRole(p) == "Sheriff" then sheriffAlive = true; break end
+    end
+    if not sheriffAlive then
+        local gunPart = findDroppedGun()
+        if gunPart then
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local targetPos = gunPart.Position + Vector3.new(0, 3, 0)
+                local dist = (hrp.Position - targetPos).Magnitude
+                if dist > 5 then
+                    local tiempo = math.max(dist / _G.MM2.rutaSpeed, 0.1)
+                    TweenService:Create(hrp, TweenInfo.new(tiempo, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)}):Play()
+                end
+            end
+        end
+    end
+end
+
+function autoEquipGun()
+    if not _G.MM2.autoEquip then return end
+    local bp = LP:FindFirstChild("Backpack")
+    if not bp then return end
+    local gun = bp:FindFirstChild("Gun") or bp:FindFirstChild("Revolver")
+    if not gun or not LP.Character then return end
+    local murdererNear = false
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character and getRole(p) == "Murderer" then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and LP.Character:FindFirstChild("HumanoidRootPart") then
+                if (LP.Character.HumanoidRootPart.Position - hrp.Position).Magnitude < 25 then murdererNear = true; break end
+            end
+        end
+    end
+    if not murdererNear then gun.Parent = LP.Character end
+end
+
+-- AUTO KILL CON TP Y REGRESO
+function autoKill()
+    if not _G.MM2.autoKill then return end
+    local char = LP.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    if _G.MM2.autoEquipKnife then
+        local bp = LP:FindFirstChild("Backpack")
+        if bp and char:FindFirstChild("Humanoid") then
+            local knife = bp:FindFirstChild("Knife")
+            if knife then
+                pcall(function() char.Humanoid:EquipTool(knife) end)
+                if knife.Parent ~= char then knife.Parent = char end
+            end
+        end
+    end
+    
+    local tool = char:FindFirstChildWhichIsA("Tool")
+    if not tool then return end
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character then
+            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local eHum = p.Character:FindFirstChild("Humanoid")
+            if eHrp and eHum and eHum.Health > 0 then
+                local dist = (hrp.Position - eHrp.Position).Magnitude
+                if dist < 200 then 
+                    local originalPos = hrp.CFrame
+                    hrp.CFrame = CFrame.new(eHrp.Position + Vector3.new(2, 0, 0))
+                    hrp.CFrame = CFrame.new(hrp.Position, eHrp.Position)
+                    pcall(function() tool:Activate() end)
+                    task.wait(0.1)
+                    hrp.CFrame = originalPos
+                    task.wait(0.5)
+                end
+            end
+        end
+    end
+end
+
+-- 1. AUTO COINS (SOLO MONEDAS)
+function startCoinFarm()
+    if coinThread then return end 
+    
+    coinThread = task.spawn(function()
+        while _G.MM2.autoCoins do
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then task.wait(0.1); continue end
+            
+            local danger = false
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LP and p.Character and getRole(p) == "Murderer" then
+                    local hum = p.Character:FindFirstChild("Humanoid")
+                    if hum and hum.Health > 0 then danger = true; break end
+                end
+            end
+            
+            if not danger then
+                local nearestCoin, minDist = nil, math.huge
+                for _, obj in pairs(workspace:GetDescendants()) do
+                    local name = obj.Name:lower()
+                    if (name:find("coin") or name:find("money") or name:find("cash") or name:find("moneda")) and obj:IsA("BasePart") then
+                        local dist = (hrp.Position - obj.Position).Magnitude
+                        if dist < minDist then minDist = dist; nearestCoin = obj end
+                    end
+                end
+                
+                if nearestCoin then
+                    local targetPos = nearestCoin.Position
+                    
+                    if not liveFarmTracer or not liveFarmTracer.Parent then
+                        liveFarmTracer = Instance.new("Part")
+                        liveFarmTracer.Name = "LiveFarmTracer"
+                        liveFarmTracer.Anchored = true; liveFarmTracer.CanCollide = false
+                        liveFarmTracer.Transparency = 0.4; liveFarmTracer.Material = Enum.Material.Neon
+                        liveFarmTracer.Color = Color3.fromRGB(0, 150, 255)
+                        liveFarmTracer.Size = Vector3.new(0.3, 0.3, 1)
+                        liveFarmTracer.Parent = workspace
+                    end
+                    
+                    local tiempo = math.max(minDist / (_G.MM2.rutaSpeed * 5), 0.01)
+                    local tween = TweenService:Create(hrp, TweenInfo.new(tiempo, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
+                    
+                    local heartbeatConn
+                    heartbeatConn = RunService.Heartbeat:Connect(function()
+                        if liveFarmTracer and liveFarmTracer.Parent and hrp and hrp.Parent then
+                            local distance = (targetPos - hrp.Position).Magnitude
+                            liveFarmTracer.Size = Vector3.new(0.3, 0.3, math.max(distance, 0.1))
+                            liveFarmTracer.CFrame = CFrame.new(hrp.Position, targetPos) * CFrame.new(0, 0, -distance/2)
+                        end
+                    end)
+                    
+                    tween:Play()
+                    
+                    local completed = false
+                    tween.Completed:Connect(function() completed = true end)
+                    while not completed and hrp and hrp.Parent do task.wait(0.1) end
+                    if not hrp or not hrp.Parent then break end
+
+                    local cd = nearestCoin:FindFirstChildWhichIsA("ClickDetector")
+                    if cd then 
+                        for i = 1, 5 do pcall(function() fireclickdetector(cd) end); task.wait(0.005) end
+                    end
+                    
+                    if heartbeatConn then heartbeatConn:Disconnect() end
+                    if liveFarmTracer and liveFarmTracer.Parent then liveFarmTracer:Destroy(); liveFarmTracer = nil end
+                    task.wait(0.01)
+                else
+                    if liveFarmTracer and liveFarmTracer.Parent then liveFarmTracer:Destroy(); liveFarmTracer = nil end
+                    task.wait(0.05)
+                end
+            else
+                task.wait(0.5)
+            end
+        end
+        if liveFarmTracer and liveFarmTracer.Parent then liveFarmTracer:Destroy(); liveFarmTracer = nil end
+        coinThread = nil
+    end)
+end
+
+-- 2. AUTO XP (TP AL TECHO)
+function startXpFarm()
+    if xpThread then return end 
+    
+    local SAFE_HEIGHT = 50 
+    local isAtSafeHeight = false
+    
+    xpThread = task.spawn(function()
+        while _G.MM2.autoXp do
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if not hrp then task.wait(0.1); continue end
+            
+            local murdererAlive = false
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LP and p.Character and getRole(p) == "Murderer" then
+                    local hum = p.Character:FindFirstChild("Humanoid")
+                    if hum and hum.Health > 0 then
+                        murdererAlive = true
+                        break
+                    end
+                end
+            end
+            
+            if murdererAlive then
+                if not isAtSafeHeight then
+                    hrp.CFrame = CFrame.new(hrp.Position.X, SAFE_HEIGHT, hrp.Position.Z)
+                    isAtSafeHeight = true
+                end
+                task.wait(0.5)
+            else
+                if isAtSafeHeight then
+                    hrp.CFrame = CFrame.new(hrp.Position.X, 5, hrp.Position.Z)
+                    isAtSafeHeight = false
+                end
+                task.wait(0.5)
+            end
+        end
+        xpThread = nil
+    end)
+end
+
+function drawRouteTracer(pos1, pos2)
+    if not pos1 or not pos2 then return end
+    local distance = (pos2 - pos1).Magnitude
+    if distance < 0.5 then return end
+    local part = Instance.new("Part")
+    part.Name = "RouteTracer"
+    part.Size = Vector3.new(0.4, 0.4, distance)
+    part.Anchored = true; part.CanCollide = false
+    part.Transparency = 0.3; part.Material = Enum.Material.Neon
+    part.Color = Color3.fromRGB(0, 150, 255)
+    part.CFrame = CFrame.new(pos1, pos2) * CFrame.new(0, 0, -distance/2)
+    part.Parent = workspace
+    table.insert(routeTracers, part)
+end
+
+function clearRouteTracers()
+    for _, t in pairs(routeTracers) do if t and t.Parent then t:Destroy() end end
+    routeTracers = {}
+end
+
+function GrabarRuta()
+    if grabando then return end
+    Ruta = {}; grabando = true; clearRouteTracers()
+    task.spawn(function()
+        while grabando do
+            task.wait(0.3)
+            local char = LP.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local currentPos = char.HumanoidRootPart.Position
+                table.insert(Ruta, char.HumanoidRootPart.CFrame)
+                if #Ruta > 1 then drawRouteTracer(Ruta[#Ruta - 1].Position, currentPos) end
+            end
+        end
+    end)
+end
+
+function PararGrabacion() grabando = false end
+
+function IniciarRuta()
+    if jugandoRuta or #Ruta == 0 then return end
+    jugandoRuta = true
+    task.spawn(function()
+        while jugandoRuta do
+            for i, cf in ipairs(Ruta) do
+                if not jugandoRuta then break end
+                local char = LP.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local root = char.HumanoidRootPart
+                    local targetPos = cf.Position
+                    local tiempo = math.max((targetPos - root.Position).Magnitude / _G.MM2.rutaSpeed, 0.1)
+                    if not liveRouteTracer or not liveRouteTracer.Parent then
+                        liveRouteTracer = Instance.new("Part")
+                        liveRouteTracer.Name = "LiveRouteTracer"
+                        liveRouteTracer.Anchored = true; liveRouteTracer.CanCollide = false
+                        liveRouteTracer.Transparency = 0.3; liveRouteTracer.Material = Enum.Material.Neon
+                        liveRouteTracer.Color = Color3.fromRGB(0, 150, 255)
+                        liveRouteTracer.Size = Vector3.new(0.4, 0.4, 1)
+                        liveRouteTracer.Parent = workspace
+                    end
+                    local heartbeatConn
+                    heartbeatConn = RunService.Heartbeat:Connect(function()
+                        if liveRouteTracer and liveRouteTracer.Parent and root and root.Parent then
+                            local distance = (targetPos - root.Position).Magnitude
+                            liveRouteTracer.Size = Vector3.new(0.4, 0.4, math.max(distance, 0.1))
+                            liveRouteTracer.CFrame = CFrame.new(root.Position, targetPos) * CFrame.new(0, 0, -distance/2)
+                        end
+                    end)
+                    local tween = TweenService:Create(root, TweenInfo.new(tiempo, Enum.EasingStyle.Linear), {CFrame = cf})
+                    tween:Play()
+                    tween.Completed:Wait()
+                    if heartbeatConn then heartbeatConn:Disconnect() end
+                    if liveRouteTracer and liveRouteTracer.Parent then liveRouteTracer:Destroy(); liveRouteTracer = nil end
+                    task.wait(0.05)
+                end
+            end
+            task.wait(0.2)
+        end
+        if liveRouteTracer and liveRouteTracer.Parent then liveRouteTracer:Destroy(); liveRouteTracer = nil end
+    end)
+end
+
+function PararRuta() 
+    jugandoRuta = false
+    if liveRouteTracer and liveRouteTracer.Parent then liveRouteTracer:Destroy(); liveRouteTracer = nil end
+end
+
+-- LOOP PRINCIPAL
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        pcall(function()
+            updateESP()
+            updateEspGun()
+            updateMurdererHitbox() 
+            aimbotMurderer()
+            autoGun()
+            autoEquipGun()
+            autoKill()
+            if flingAllEnabled then applyFlingAll()
+            else
+                if flingMurdererEnabled then applyFlingMurderer() end
+                if flingGunEnabled then applyFlingGun() end
+            end
+        end)
+    end
+end)
+
+-- ==========================================
+-- INTERFAZ WINDUI
+-- ==========================================
+local espTab = Window:Tab({Title = "ESP", Icon = "eye"})
+espTab:Toggle({Title = "ESP Players", Description = "Rojo=Murderer, Azul=Sheriff, Verde=Inocente", Default = true, Callback = function(s) _G.MM2.esp = s; if not s then for _,o in pairs(espCache) do if o.billboard and o.billboard.Parent then o.billboard:Destroy() end end; espCache={} end end})
+espTab:Toggle({Title = "ESP Gun (Tracer + Distancia)", Description = "Detecta arma tirada en el suelo", Default = false, Callback = function(s) 
+    _G.MM2.espGun = s
+    if not s then
+        if liveGunTracer and liveGunTracer.Parent then liveGunTracer:Destroy(); liveGunTracer = nil end
+        if liveGunLabel and liveGunLabel.Parent then liveGunLabel:Destroy(); liveGunLabel = nil end
+    end
+end})
+
+local combatTab = Window:Tab({Title = "Combat", Icon = "sword"})
+combatTab:Toggle({Title = "Aimbot Murderer", Description = "Apunta al murderer", Default = false, Callback = function(s) _G.MM2.aimbot = s end})
+combatTab:Toggle({Title = "Hitbox Murderer (FIXED)", Description = "Muestra hitbox rojo alrededor del Murderer", Default = false, Callback = function(s) _G.MM2.murdererHitbox = s end})
+combatTab:Toggle({Title = "Auto Equip Gun (Pasivo)", Description = "Equipar arma cuando es seguro", Default = false, Callback = function(s) _G.MM2.autoEquip = s end})
+combatTab:Toggle({Title = "Auto Kill (Teleport + Hit)", Description = "Teletransporte y un solo ataque", Default = false, Callback = function(s) _G.MM2.autoKill = s end})
+combatTab:Toggle({Title = "Auto Equip Knife", Description = "Fuerza el equipamiento del cuchillo", Default = false, Callback = function(s) _G.MM2.autoEquipKnife = s end})
+
+local autoTab = Window:Tab({Title = "Auto", Icon = "zap"})
+autoTab:Toggle({Title = "Auto Gun", Description = "Ir suavemente al arma", Default = false, Callback = function(s) _G.MM2.autoGun = s end})
+
+autoTab:Toggle({Title = "Auto Coins (Suelo)", Description = "Recoge monedas automáticamente", Default = false, Callback = function(s) 
+    _G.MM2.autoCoins = s
+    if s then 
+        startCoinFarm()
+        coinBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50); coinBtn.Text = "AUTO COINS: ON"
+    else 
+        if coinThread then task.cancel(coinThread); coinThread = nil end
+        if liveFarmTracer and liveFarmTracer.Parent then liveFarmTracer:Destroy(); liveFarmTracer = nil end
+        coinBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50); coinBtn.Text = "AUTO COINS: OFF"
+    end 
+end})
+
+autoTab:Toggle({Title = "Auto XP (Techo)", Description = "TP arriba al iniciar partida", Default = false, Callback = function(s) 
+    _G.MM2.autoXp = s
+    if s then 
+        startXpFarm()
+        xpBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50); xpBtn.Text = "TP TECHO (XP): ON"
+    else 
+        if xpThread then task.cancel(xpThread); xpThread = nil end
+        local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and hrp.Position.Y > 40 then hrp.CFrame = CFrame.new(hrp.Position.X, 5, hrp.Position.Z) end
+        xpBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 255); xpBtn.Text = "TP TECHO (XP): OFF"
+    end 
+end})
+
+local flingTab = Window:Tab({Title = "Fling", Icon = "wind"})
+flingTab:Toggle({Title = "Fling All (Todos)", Description = "Mandar a volar a TODOS", Default = false, Callback = function(s) flingAllEnabled = s; if s then flingMurdererEnabled = false; flingGunEnabled = false end end})
+flingTab:Toggle({Title = "Fling Murderer", Description = "Mandar a volar SOLO al Murderer", Default = false, Callback = function(s) flingMurdererEnabled = s; if s then flingAllEnabled = false end end})
+flingTab:Toggle({Title = "Fling Gun (Sheriff)", Description = "Mandar a volar SOLO al Sheriff", Default = false, Callback = function(s) flingGunEnabled = s; if s then flingAllEnabled = false end end})
+flingTab:Toggle({Title = "Anti Fling (Posición Fija)", Description = "Mantiene tu posición, no te mueven", Default = false, Callback = function(s) if s then enableAntiFling() else disableAntiFling() end end})
+
+local routesTab = Window:Tab({Title = "Routes", Icon = "map"})
+routesTab:Slider({Title = "Velocidad Unificada", Min = 1, Max = 100, Default = 25, Callback = function(v) _G.MM2.rutaSpeed = v end})
+routesTab:Button({Title = "Grabar Ruta (con Tracers)", Callback = GrabarRuta})
+routesTab:Button({Title = "Parar Grabación", Callback = PararGrabacion})
+routesTab:Button({Title = "Iniciar Ruta (con Tracer en vivo)", Callback = IniciarRuta})
+routesTab:Button({Title = "Parar Ruta", Callback = PararRuta})
+routesTab:Button({Title = "Borrar Tracers", Callback = clearRouteTracers})
+
+local visualTab = Window:Tab({Title = "Visual", Icon = "monitor"})
+visualTab:Toggle({Title = "Invisibilidad Real", Description = "Nadie te ve (sin bugs)", Default = false, Callback = function(s) 
+    if s then enableInvisibility() else disableInvisibility() end
+end})
+visualTab:Toggle({Title = "God Mode (Vida Infinita)", Description = "Bloqueo de remotes + salud constante", Default = false, Callback = function(s) 
+    if s then enableGodMode() else disableGodMode() end
+end})
+visualTab:Toggle({Title = "Show FPS", Description = "Contador de FPS con colores", Default = false, Callback = function(s) fpsEnabled = s; fpsFrame.Visible = s end})
+visualTab:Toggle({Title = "Fps Boost", Description = "Desactivar partículas y sombras", Default = false, Callback = function(s) if s then applyFpsBoost() else removeFpsBoost() end end})
+
+local settingsTab = Window:Tab({Title = "Settings", Icon = "settings"})
+settingsTab:Button({Title = "Destroy UI", Callback = function() 
+    WindUI:Destroy()
+    if coinBtn and coinBtn.Parent then coinBtn:Destroy() end
+    if xpBtn and xpBtn.Parent then xpBtn:Destroy() end
+    if fpsGui and fpsGui.Parent then fpsGui:Destroy() end
+    if murdererHighlight and murdererHighlight.Parent then murdererHighlight:Destroy() end
+    disableInvisibility()
+    disableGodMode()
+    disableAntiFling()
+end})
